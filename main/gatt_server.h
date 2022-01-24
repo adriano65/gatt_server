@@ -211,6 +211,7 @@ union _map1 {
         struct _bit_vars1 bit_vars;      // data output as single bit field.
 };
 
+#define KEY_BUF_LEN 20
 
 typedef struct _gatts_dat {
   uint16_t nMainLoopDelay;
@@ -220,8 +221,10 @@ typedef struct _gatts_dat {
   char boardID[18];
   char ble_adv_name[24];
   uint16_t ble_adv_name_len;
-  char keyb_buf[10];
+  char keyb_buf[KEY_BUF_LEN];
   uint32_t spp_handle;
+  esp_gatt_rsp_t rsp_a;
+  esp_gatt_rsp_t rsp_b;
   SemaphoreHandle_t mutex;
 } _gatts_data;
 
