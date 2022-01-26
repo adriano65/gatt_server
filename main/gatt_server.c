@@ -122,8 +122,16 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
     }
 }
 
-void example_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param){
+void example_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param, uint16_t idx){
     esp_gatt_status_t status = ESP_GATT_OK;
+
+    DBG_MIN("idx %d, param 0x%02X, 0x%02X, len %d", idx, param->write.value[0], param->write.value[1], param->write.len);
+    gatts_data.rsp[idx].attr_value.len=param->write.len;
+    gatts_data.rsp[idx].attr_value.handle = param->write.handle;
+    gatts_data.rsp[idx].attr_value.offset = param->write.offset;
+    gatts_data.rsp[idx].attr_value.auth_req = ESP_GATT_AUTH_REQ_NONE;
+    memcpy(gatts_data.rsp[idx].attr_value.value, param->write.value, param->write.len);
+
     if (param->write.need_rsp){
         if (param->write.is_prep){
             if (prepare_write_env->prepare_buf == NULL) {
@@ -143,18 +151,11 @@ void example_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare
                         }
                 }
 
-            esp_gatt_rsp_t *gatt_rsp = (esp_gatt_rsp_t *)malloc(sizeof(esp_gatt_rsp_t));
-            gatt_rsp->attr_value.len = param->write.len;
-            gatt_rsp->attr_value.handle = param->write.handle;
-            gatt_rsp->attr_value.offset = param->write.offset;
-            gatt_rsp->attr_value.auth_req = ESP_GATT_AUTH_REQ_NONE;
-            memcpy(gatt_rsp->attr_value.value, param->write.value, param->write.len);
-            esp_err_t response_err = esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, status, gatt_rsp);
+            esp_err_t response_err = esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, status, &gatts_data.rsp[idx]);
             if (response_err != ESP_OK){
               ESP_LOGE(GATTS_TAG, "Send response error\n");
               }
-            DBG_MIN("value[0] 0x%02X, 0x%02X len %d", gatt_rsp->attr_value.value[0], gatt_rsp->attr_value.value[1], gatt_rsp->attr_value.len);
-            free(gatt_rsp);
+            DBG_MIN("1. value[0] 0x%02X, 0x%02X len %d", gatts_data.rsp[idx].attr_value.value[idx], gatts_data.rsp[idx].attr_value.value[1], gatts_data.rsp[idx].attr_value.len);
             if (status != ESP_GATT_OK){
               return;
               }
@@ -162,7 +163,8 @@ void example_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare
             prepare_write_env->prepare_len += param->write.len;
           }
         else{
-          DBG_MIN("value[0] 0x%02X, 0x%02X len %d", param->write.value[0], param->write.value[1], param->write.len);
+          DBG_MIN("2. value[0] 0x%02X, 0x%02X len %d", param->write.value[0], param->write.value[1], param->write.len);
+
           esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, status, NULL);
           }
     DBG_MIN("param->write.need_rsp");
@@ -227,8 +229,8 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 
     case ESP_GATTS_READ_EVT: {
         DBG_MIN("GATT_READ_EVT, conn_id %d, trans_id %d, handle %d", param->read.conn_id, param->read.trans_id, param->read.handle);
-        gatts_data.rsp_a.attr_value.handle = param->read.handle;
-        esp_ble_gatts_send_response(gatts_if, param->read.conn_id, param->read.trans_id, ESP_GATT_OK, &gatts_data.rsp_a);
+        gatts_data.rsp[0].attr_value.handle = param->read.handle;
+        esp_ble_gatts_send_response(gatts_if, param->read.conn_id, param->read.trans_id, ESP_GATT_OK, &gatts_data.rsp[0]);
         }
         break;
 
@@ -269,7 +271,7 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 
             }
           }
-        example_write_event_env(gatts_if, &a_prepare_write_env, param);
+        example_write_event_env(gatts_if, &a_prepare_write_env, param, PROFILE_A_APP_ID);
         break;
     }
     case ESP_GATTS_EXEC_WRITE_EVT:
@@ -407,8 +409,8 @@ static void gatts_profile_b_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 
     case ESP_GATTS_READ_EVT:
         DBG_MIN("GATT_READ_EVT, conn_id %d, trans_id %d, handle %d", param->read.conn_id, param->read.trans_id, param->read.handle);
-        gatts_data.rsp_b.attr_value.handle = param->read.handle;
-        esp_ble_gatts_send_response(gatts_if, param->read.conn_id, param->read.trans_id, ESP_GATT_OK, &gatts_data.rsp_b);
+        gatts_data.rsp[1].attr_value.handle = param->read.handle;
+        esp_ble_gatts_send_response(gatts_if, param->read.conn_id, param->read.trans_id, ESP_GATT_OK, &gatts_data.rsp[1]);
         break;
 
     case ESP_GATTS_WRITE_EVT:
@@ -446,7 +448,7 @@ static void gatts_profile_b_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
             }
           }
         }
-      example_write_event_env(gatts_if, &b_prepare_write_env, param);
+      example_write_event_env(gatts_if, &b_prepare_write_env, param, PROFILE_B_APP_ID);
       break;
 
     case ESP_GATTS_EXEC_WRITE_EVT:
@@ -554,15 +556,14 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
     /* If the gatts_if equal to profile A, call profile A cb handler,
      * so here call each profile's callback */
     do {
-        int idx;
+        uint8_t idx;
         for (idx = 0; idx < PROFILE_NUM; idx++) {
-            if (gatts_if == ESP_GATT_IF_NONE || /* ESP_GATT_IF_NONE, not specify a certain gatt_if, need to call every profile cb function */
-                    gatts_if == gl_profile_tab[idx].gatts_if) {
-                if (gl_profile_tab[idx].gatts_cb) {
-                    gl_profile_tab[idx].gatts_cb(event, gatts_if, param);
-                }
+          if (gatts_if == ESP_GATT_IF_NONE || gatts_if == gl_profile_tab[idx].gatts_if) { /* ESP_GATT_IF_NONE, not specify a certain gatt_if, need to call every profile cb function */
+            if (gl_profile_tab[idx].gatts_cb) {
+              gl_profile_tab[idx].gatts_cb(event, gatts_if, param);
+              }
             }
-        }
+          }
     } while (0);
 }
 
@@ -592,15 +593,16 @@ void read_flash(void) {
   lenght=gatts_data.ble_adv_name_len+1;
   if ((err = nvs_get_blob(nvsHandle, GATT_SRV_NAME, (char *)&gatts_data.ble_adv_name, &lenght)) != ESP_OK) { DBG_MIN("failed %s(0x%X)", esp_err_to_name(err), err); }
 
-  
-  #if 0
-  /* ----------------------------------------------------------------------------------------- */
-  if ((err = nvs_get_u8(nvsHandle, OZ_MAP1_KEY, &ozono_data.map.bits)) != ESP_OK) { DBG_MIN("Get map1 %s(0x%X)", esp_err_to_name(err), err); }
+  if ((err = nvs_get_u16(nvsHandle, GATT_PROFILE_A_LEN, &gatts_data.rsp[0].attr_value.len)) != ESP_OK) { DBG_MIN("Get event_id %s(0x%X)", esp_err_to_name(err), err); }
+  lenght=gatts_data.rsp[0].attr_value.len;
+  DBG_MIN("gatts_data.rsp[0].attr_value.len %u", gatts_data.rsp[0].attr_value.len);
+  if ((err = nvs_get_blob(nvsHandle, GATT_PROFILE_A_DATA, (char *)&gatts_data.rsp[0].attr_value.value, &lenght)) != ESP_OK) { DBG_MIN("failed %s(0x%X)", esp_err_to_name(err), err); }
 
-  if ((err = nvs_get_u16(nvsHandle, OZ_EVTID_KEY, &ozono_data.event_id)) != ESP_OK) { DBG_MIN("Get event_id %s(0x%X)", esp_err_to_name(err), err); }
-  if ((err = nvs_get_u16(nvsHandle, OZ_EVTCODE_KEY, &ozono_data.event_code)) != ESP_OK) { DBG_MIN("Get event_code %s(0x%X)", esp_err_to_name(err), err); }
-  if ((err = nvs_get_u16(nvsHandle, OZ_DATAMSGFREQ_KEY, &ozono_data.spare)) != ESP_OK) { DBG_MIN("Get spare %s(0x%X)", esp_err_to_name(err), err); }
-  #endif
+  if ((err = nvs_get_u16(nvsHandle, GATT_PROFILE_B_LEN, &gatts_data.rsp[1].attr_value.len)) != ESP_OK) { DBG_MIN("Get event_id %s(0x%X)", esp_err_to_name(err), err); }
+  lenght=gatts_data.rsp[1].attr_value.len;
+  DBG_MIN("gatts_data.rsp[1].attr_value.len %u", gatts_data.rsp[1].attr_value.len);
+  if ((err = nvs_get_blob(nvsHandle, GATT_PROFILE_B_DATA, (char *)&gatts_data.rsp[1].attr_value.value, &lenght)) != ESP_OK) { DBG_MIN("failed %s(0x%X)", esp_err_to_name(err), err); }
+  DBG_MAX("gatts_data.rsp[1].attr_value.value %s", gatts_data.rsp[1].attr_value.value);
 
   nvs_close(nvsHandle);
 }
@@ -611,9 +613,17 @@ void write_flash(){
   ESP_ERROR_CHECK(err);
 
   gatts_data.ble_adv_name_len=strlen(gatts_data.ble_adv_name);
-  DBG_MIN("ble_adv_name_len %u", gatts_data.ble_adv_name_len);
+  DBG_MAX("ble_adv_name_len %u", gatts_data.ble_adv_name_len);
   if ((err = nvs_set_u16(nvsHandle, GATT_SRV_NAME_LEN, gatts_data.ble_adv_name_len+1)) != ESP_OK) { DBG_MIN("nvs_set_u16 failed %s(0x%X)", esp_err_to_name(err), err); }
   if ((err = nvs_set_blob(nvsHandle, GATT_SRV_NAME, (char *)&gatts_data.ble_adv_name, gatts_data.ble_adv_name_len+1)) != ESP_OK) { DBG_MIN("write to NVS failed %s(0x%X)", esp_err_to_name(err), err); }
+
+  DBG_MIN("gatts_data.rsp[0].attr_value.len %u", gatts_data.rsp[0].attr_value.len);
+  if ((err = nvs_set_u16(nvsHandle, GATT_PROFILE_A_LEN, gatts_data.rsp[0].attr_value.len)) != ESP_OK) { DBG_MIN("nvs_set_u16 failed %s(0x%X)", esp_err_to_name(err), err); }
+  if ((err = nvs_set_blob(nvsHandle, GATT_PROFILE_A_DATA, (char *)&gatts_data.rsp[0].attr_value.value, gatts_data.rsp[0].attr_value.len)) != ESP_OK) { DBG_MIN("write to NVS failed %s(0x%X)", esp_err_to_name(err), err); }
+
+  DBG_MIN("gatts_data.rsp[1].attr_value.len %u", gatts_data.rsp[1].attr_value.len);
+  if ((err = nvs_set_u16(nvsHandle, GATT_PROFILE_B_LEN, gatts_data.rsp[1].attr_value.len)) != ESP_OK) { DBG_MIN("nvs_set_u16 failed %s(0x%X)", esp_err_to_name(err), err); }
+  if ((err = nvs_set_blob(nvsHandle, GATT_PROFILE_B_DATA, (char *)&gatts_data.rsp[1].attr_value.value, gatts_data.rsp[1].attr_value.len)) != ESP_OK) { DBG_MIN("write to NVS failed %s(0x%X)", esp_err_to_name(err), err); }
 
   if ((err = nvs_commit(nvsHandle)) == ESP_OK) {
     DBG_MIN(" SAVED");
@@ -639,19 +649,23 @@ void setDefaults(esp_sleep_wakeup_cause_t wakeup_reason) {
   gatts_data.map.bit_vars.bDeepSleepEnabled=true;
   gatts_data.nMainLoopDelay=500;
 
-  bzero(&gatts_data.rsp_a, sizeof(esp_gatt_rsp_t));
-  gatts_data.rsp_a.attr_value.len = 4;
-  gatts_data.rsp_a.attr_value.value[0] = 0xde;
-  gatts_data.rsp_a.attr_value.value[1] = 0xad;
-  gatts_data.rsp_a.attr_value.value[2] = 0xbe;
-  gatts_data.rsp_a.attr_value.value[3] = 0xef;
+  esp_gatt_rsp_t * rsp1 = (esp_gatt_rsp_t *)malloc(sizeof(esp_gatt_rsp_t));
+  gatts_data.rsp[0] = *rsp1;
+  bzero(&gatts_data.rsp[0], sizeof(esp_gatt_rsp_t));
+  gatts_data.rsp[0].attr_value.len = 4;
+  gatts_data.rsp[0].attr_value.value[0] = 0xde;
+  gatts_data.rsp[0].attr_value.value[1] = 0xad;
+  gatts_data.rsp[0].attr_value.value[2] = 0xbe;
+  gatts_data.rsp[0].attr_value.value[3] = 0xef;
 
-  bzero(&gatts_data.rsp_b, sizeof(esp_gatt_rsp_t));
-  gatts_data.rsp_b.attr_value.len = 4;
-  gatts_data.rsp_b.attr_value.value[0] = 0xbb;
-  gatts_data.rsp_b.attr_value.value[1] = 0xbb;
-  gatts_data.rsp_b.attr_value.value[2] = 0xbb;
-  gatts_data.rsp_b.attr_value.value[3] = 0xbb;
+  esp_gatt_rsp_t * rsp2 = (esp_gatt_rsp_t *)malloc(sizeof(esp_gatt_rsp_t));
+  gatts_data.rsp[0] = *rsp2;
+  bzero(&gatts_data.rsp[1], sizeof(esp_gatt_rsp_t));
+  gatts_data.rsp[1].attr_value.len = 4;
+  gatts_data.rsp[1].attr_value.value[0] = 0xbb;
+  gatts_data.rsp[1].attr_value.value[1] = 0xbb;
+  gatts_data.rsp[1].attr_value.value[2] = 0xbb;
+  gatts_data.rsp[1].attr_value.value[3] = 0xbb;
 
 }
 
@@ -843,8 +857,8 @@ void keyb_parser(void *parm) {
       break;
 
     case 'W':
-      DBG_MIN("written");
       write_flash();
+      DBG_MIN("written");
       break;  
 
     case '+':

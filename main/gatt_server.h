@@ -29,12 +29,13 @@
 
 #define GATTS_TAG "GATT_SRV"
 
-///Declare the static function
-static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
-static void gatts_profile_b_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
+//#define GATTS_SERVICE_UUID_TEST_A   0x00FF
+//#define GATTS_SERVICE_UUID_TEST_A   0x27AB  //energy(kilowatthour)
+#define GATTS_SERVICE_UUID_TEST_A   0xFCF6  //TheLinuxFoundation                
 
-#define GATTS_SERVICE_UUID_TEST_A   0x00FF
 #define GATTS_CHAR_UUID_TEST_A      0xFF01
+//#define GATTS_CHAR_UUID_TEST_A      0x27AB
+
 #define GATTS_DESCR_UUID_TEST_A     0x3333
 #define GATTS_NUM_HANDLE_TEST_A     4
 
@@ -49,6 +50,11 @@ static void gatts_profile_b_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 #define NVS_BASE_NAME "storage"
 #define GATT_SRV_NAME     "G_NAME"
 #define GATT_SRV_NAME_LEN "G_NAMELEN"
+
+#define GATT_PROFILE_A_LEN    "G_PROF_A_LEN"
+#define  GATT_PROFILE_A_DATA  "G_PROF_A_NAME"
+#define GATT_PROFILE_B_LEN    "G_PROF_B_LEN"
+#define  GATT_PROFILE_B_DATA  "G_PROF_B_NAME"
 
 //#define CONFIG_SET_RAW_ADV_DATA
 
@@ -100,9 +106,13 @@ static uint8_t raw_scan_rsp_data[] = {
 static uint8_t adv_service_uuid128[32] = {
     /* LSB <--------------------------------------------------------------------------------> MSB */
     //first uuid, 16bit, [12],[13] is the value
-    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xEE, 0x00, 0x00, 0x00,
+    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00,
+    0xEE, 0x00,    
+    0x00, 0x00,
     //second uuid, 32bit, [12], [13], [14], [15] is the value
-    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00,
+    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00,
+    //0x00, 0xFF, 0x00, 0x00, 0x00,
+    0x01, 0xFF, 0x02, 0x03, 0x00,
 };
 
 // The length of adv data must be less than 31 bytes
@@ -174,17 +184,24 @@ struct gatts_profile_inst {
     esp_gatt_char_prop_t property;
     uint16_t descr_handle;
     esp_bt_uuid_t descr_uuid;
+    uint16_t idx;
 };
+
+///Declare the static function
+static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
+static void gatts_profile_b_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
 
 /* One gatt-based profile one app_id and one gatts_if, this array will store the gatts_if returned by ESP_GATTS_REG_EVT */
 static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
     [PROFILE_A_APP_ID] = {
         .gatts_cb = gatts_profile_a_event_handler,
         .gatts_if = ESP_GATT_IF_NONE,       /* Not get the gatt_if, so initial is ESP_GATT_IF_NONE */
+        .idx =PROFILE_A_APP_ID,
     },
     [PROFILE_B_APP_ID] = {
-        .gatts_cb = gatts_profile_b_event_handler,                   /* This demo does not implement, similar as profile A */
+        .gatts_cb = gatts_profile_b_event_handler,       /* This demo does not implement, similar as profile A */
         .gatts_if = ESP_GATT_IF_NONE,       /* Not get the gatt_if, so initial is ESP_GATT_IF_NONE */
+        .idx =PROFILE_B_APP_ID,
     },
 };
 
@@ -193,7 +210,7 @@ typedef struct {
     int                     prepare_len;
 } prepare_type_env_t;
 
-void example_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
+void example_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param, uint16_t idx);
 void example_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
 
 
@@ -223,8 +240,7 @@ typedef struct _gatts_dat {
   uint16_t ble_adv_name_len;
   char keyb_buf[KEY_BUF_LEN];
   uint32_t spp_handle;
-  esp_gatt_rsp_t rsp_a;
-  esp_gatt_rsp_t rsp_b;
+  esp_gatt_rsp_t rsp[2];
   SemaphoreHandle_t mutex;
 } _gatts_data;
 
